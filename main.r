@@ -1,4 +1,5 @@
 # install packages
+library(tidyverse)
 # install.packages("dplyr")
 library(dplyr)
 # install.packages("readr")
@@ -50,11 +51,18 @@ runPipeline <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, t
       filter(is.na(`Potential contaminant`))
   }
   
+  # split each row into more rows depending on amount of identified proteins, if one_protein_per_row = TRUE
+  if (one_protein_per_row) {
+    out_df <- out_df %>%
+      separate_rows(`Protein IDs`, sep = ';')
+  }
+  
   # output a dataframe
   return(out_df)
 }
 
 # read protein group files
 pgdata <- read_tsv("pgdata.tsv")
-pgdata_processed <- runPipeline(pgdata, log2t = TRUE)
-View(pgdata_processed)
+pgdata_processed <- runPipeline(pgdata)
+# View(pgdata_processed)
+write_tsv(pgdata_processed, "pgdata_processed.tsv")
