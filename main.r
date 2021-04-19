@@ -133,8 +133,6 @@ matrix_filter <- function (pg_df, mf_df, sample.id.col='Sample.ID', method='perc
     warning("Matrix was not filtered; method was not specified as 'percentage' or 'raw'")
   }
   
-  View(combined_df)
-  
   return(combined_df)
 }
 
