@@ -63,15 +63,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   return(out_df)
 }
 
-matrix_filter <- function (pg_df, mf_df, sample.id.col='Sample.ID', method='percentage', filterGroup='DIAGNOSIS',percentageNA = 0.5, maxNA=0, intensity_type="Raw", log2t) {
-  # throw error if percentageNA < 0 or > 100
-  if (percentageNA < 0 || percentageNA > 100) {
-    stop("percentageNA must be between 0 and 100.")
-  }
-  
-  # change -Inf to NA
-  is.na(pg_df) <- sapply(pg_df, is.infinite)
-  
+combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID', intensity_type = 'Raw') {
   proteingroups <- tibble(pg_df)
   
   # convert protein groups tibble to long format
@@ -99,23 +91,35 @@ matrix_filter <- function (pg_df, mf_df, sample.id.col='Sample.ID', method='perc
     select(-Sample.ID) %>%
     distinct()
   
+  return(combined_df)
+}
+
+filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSIS',percentageNA = 0.5, maxNA=0, log2t) {
+  # change -Inf to NA
+  is.na(pg_df) <- sapply(pg_df, is.infinite)
+  
+  # throw error if percentageNA < 0 or > 100
+  if (percentageNA < 0 || percentageNA > 100) {
+    stop("percentageNA must be between 0 and 100.")
+  }
+  
   # create NARate column names for every unique diagnosis
-  diagnoses <- unique(combined_df$DIAGNOSIS)
+  diagnoses <- unique(pg_df$DIAGNOSIS)
   
   # filter values that do not meet conditions
   # first, create columns of NA counts and total diagnoses for each protein group and diagnosis
-  combined_df <- combined_df %>%
+  pg_df <- pg_df %>%
     mutate(MinNARate = 1, MaxNAcount = 0)
   
   if (log2t) {
     for (i in diagnoses) {
-      combined_df <- combined_df %>%
+      pg_df <- pg_df %>%
         group_by(`Protein IDs`) %>%
         mutate("NACount.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i), "NARate.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & DIAGNOSIS == i)))
     }
   } else {
     for (i in diagnoses) {
-      combined_df <- combined_df %>%
+      pg_df <- pg_df %>%
         group_by(`Protein IDs`) %>%
         mutate("NACount.{{i}}" := sum(Intensity == 0 & DIAGNOSIS == i), "NARate.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & DIAGNOSIS == i)))
     }
@@ -123,17 +127,17 @@ matrix_filter <- function (pg_df, mf_df, sample.id.col='Sample.ID', method='perc
   
   # then, filter based on percentage or raw amount
   if (method == "percentage") {
-    combined_df <- combined_df %>%
+    pg_df <- pg_df %>%
       filter(MinNARate <= percentageNA)
   } else if (method == "raw") {
-    combined_df <- combined_df %>%
+    pg_df <- pg_df %>%
       group_by(`Protein IDs`, DIAGNOSIS) %>%
       filter(MaxNAcount <= maxNA)
   } else {
     warning("Matrix was not filtered; method was not specified as 'percentage' or 'raw'")
   }
   
-  return(combined_df)
+  return(pg_df)
 }
 
 # read protein group files
@@ -142,4 +146,6 @@ manifest <- read_tsv("manifest.tsv")
 pgdata_processed <- runMQ(pgdata, log2t = TRUE)
 # View(pgdata_processed)
 # write_tsv(pgdata_processed, "pgdata_processed.tsv")
-pgdata_2 <- matrix_filter(pgdata_processed, manifest, log2t = TRUE, method="raw", maxNA = 5)
+pgdata_2 <- combine_matrix(pgdata_processed, manifest, intensity_type="Raw")
+pgdata_3 <- filter_intensities(pgdata_2, log2t = TRUE, method="raw", maxNA = 5)
+View(pgdata_3)
