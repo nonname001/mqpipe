@@ -1,11 +1,12 @@
 # install packages
 library(tidyverse)
-# install.packages("dplyr")
-library(dplyr)
-# install.packages("readr")
-library(readr)
 #install.packages("fuzzyjoin")
 library(fuzzyjoin)
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("pcaMethods")
+library(pcaMethods)
+# library(imputeLCMD)
 
 # define pipeline
 # pg_df: input dataframe
@@ -140,12 +141,57 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
   return(pg_df)
 }
 
+impute <- function(pg_df, method = "PPCA", nPcs=3, imputeGroup, intensity_type) {
+  # tibble --> data matrix
+  
+  # split into groups
+  diagnoses <- unique(pg_df$DIAGNOSIS)
+  
+  #impute_df <- pg_df %>%
+  #  ungroup() %>%
+  #  select(`Protein IDs`, `Gene names`, Reverse, `Potential contaminant`, id, `Peptide IDs`, Sample, Intensity, -DIAGNOSIS) %>%
+  #  spread(Sample, Intensity)
+  groupdata_df <- pg_df %>%
+    select(`Protein IDs`, `Gene names`, Reverse, `Potential contaminant`, id, `Peptide IDs`, Sample, Intensity)
+  impute_df <- tibble(groupdata_df) %>%
+    ungroup() %>%
+    select(-DIAGNOSIS) %>%
+    spread(Sample, Intensity) %>%
+    select(-starts_with("Intensity"), -starts_with("LFQ intensity"), -starts_with("MS/MS count"))
+  # impute each group, combine with impute_df
+  for (i in diagnoses) {
+    cur_grp <- groupdata_df %>%
+      ungroup() %>%
+      filter(DIAGNOSIS == i) %>%
+      spread(Sample, Intensity) %>%
+      select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), id)
+    pc <- pca(cur_grp, method="bpca", nPcs=nPcs)
+    impute_df <- impute_df %>%
+      inner_join(completeObs(pc), copy=TRUE)
+  }
+  # convert to long format
+  # convert protein groups tibble to long format
+  if (intensity_type == "Raw") {
+    impute_df <- impute_df %>%
+      gather("Sample", "Intensity", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
+  } else if (intensity_type == "LFQ") {
+    impute_df <- impute_df %>%
+      gather("Sample", "LFQ intensity", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
+  } else if (intensity_type == "MS2") {
+    impute_df <- impute_df %>%
+      gather("Sample", "MS/MS count", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
+  } else {
+    warning("type should be specified as 'Raw', 'LFQ', or 'MS2'.")
+  }
+  
+  return (impute_df)
+}
+
 # read protein group files
 pgdata <- read_tsv("pgdata.tsv")
 manifest <- read_tsv("manifest.tsv")
-pgdata_processed <- runMQ(pgdata, log2t = TRUE)
-# View(pgdata_processed)
-# write_tsv(pgdata_processed, "pgdata_processed.tsv")
+pgdata_1 <- runMQ(pgdata, log2t = TRUE)
 pgdata_2 <- combine_matrix(pgdata_processed, manifest, intensity_type="Raw")
 pgdata_3 <- filter_intensities(pgdata_2, log2t = TRUE, method="raw", maxNA = 5)
-View(pgdata_3)
+pgdata_4 <- impute(pgdata_3, nPcs = 3, intensity_type="Raw")
+write_tsv(pgdata_4, "pgdata_processed.tsv")
