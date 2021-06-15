@@ -83,13 +83,13 @@ combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID', intensity_t
   
   # add regex column to manifest
   manifest_local <- mf_df %>%
-    mutate(Sample.ID.regex = paste("(Intensity|LFQ intensity|MS/MS count)\\s", Sample.ID, ".*", sep=""))
+    mutate(Sample.ID.regex = paste("(Intensity|LFQ intensity|MS/MS count)\\s", !!sym(sample.id.col), ".*", sep=""))
   
   gsub(".", "[.]", manifest_local$Sample.ID.regex)
   
   # use left join to add patient diagnosis to sample ID
   combined_df <- regex_left_join(proteingroups, manifest_local, by=c(Sample = "Sample.ID.regex"))[-ncol(proteingroups) - ncol(manifest_local)] %>%
-    select(-Sample.ID) %>%
+    select(-!!sym(sample.id.col)) %>%
     distinct()
   
   return(combined_df)
@@ -105,7 +105,7 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
   }
   
   # create NARate column names for every unique diagnosis
-  diagnoses <- unique(pg_df$DIAGNOSIS)
+  diagnoses <- unique(pull(pg_df, !!sym(filterGroup)))
   
   # filter values that do not meet conditions
   # first, create columns of NA counts and total diagnoses for each protein group and diagnosis
@@ -116,13 +116,13 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
     for (i in diagnoses) {
       pg_df <- pg_df %>%
         group_by(`Protein IDs`) %>%
-        mutate("NACount.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i), "NARate.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & DIAGNOSIS == i)))
+        mutate("NACount.{{i}}" := sum(is.na(Intensity) & !!sym(filterGroup) == i), "NARate.{{i}}" := sum(is.na(Intensity) & !!sym(filterGroup) == i)/sum(!!sym(filterGroup) == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & !!sym(filterGroup) == i)/sum(!!sym(filterGroup) == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & !!sym(filterGroup) == i)))
     }
   } else {
     for (i in diagnoses) {
       pg_df <- pg_df %>%
         group_by(`Protein IDs`) %>%
-        mutate("NACount.{{i}}" := sum(Intensity == 0 & DIAGNOSIS == i), "NARate.{{i}}" := sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & DIAGNOSIS == i)/sum(DIAGNOSIS == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & DIAGNOSIS == i)))
+        mutate("NACount.{{i}}" := sum(Intensity == 0 & !!sym(filterGroup) == i), "NARate.{{i}}" := sum(is.na(Intensity) & !!sym(filterGroup) == i)/sum(!!sym(filterGroup) == i), MinNARate = min(MinNARate, sum(is.na(Intensity) & !!sym(filterGroup) == i)/sum(!!sym(filterGroup) == i)), MaxNAcount = max(MaxNAcount, sum(is.na(Intensity) & !!sym(filterGroup) == i)))
     }
   }
   
@@ -132,7 +132,7 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
       filter(MinNARate <= percentageNA)
   } else if (method == "raw") {
     pg_df <- pg_df %>%
-      group_by(`Protein IDs`, DIAGNOSIS) %>%
+      group_by(`Protein IDs`, !!sym(filterGroup)) %>%
       filter(MaxNAcount <= maxNA)
   } else {
     warning("Matrix was not filtered; method was not specified as 'percentage' or 'raw'")
@@ -141,36 +141,32 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
   return(pg_df)
 }
 
-impute <- function(pg_df, method = "PPCA", nPcs=3, imputeGroup, intensity_type) {
+impute <- function(pg_df, method = "PPCA", nPcs=3, imputeGroup = "DIAGNOSIS", intensity_type) {
   # tibble --> data matrix
   
   # split into groups
-  diagnoses <- unique(pg_df$DIAGNOSIS)
+  diagnoses <- unique(pull(pg_df, !!sym(imputeGroup)))
   
-  #impute_df <- pg_df %>%
-  #  ungroup() %>%
-  #  select(`Protein IDs`, `Gene names`, Reverse, `Potential contaminant`, id, `Peptide IDs`, Sample, Intensity, -DIAGNOSIS) %>%
-  #  spread(Sample, Intensity)
   groupdata_df <- pg_df %>%
     select(`Protein IDs`, `Gene names`, Reverse, `Potential contaminant`, id, `Peptide IDs`, Sample, Intensity)
   impute_df <- tibble(groupdata_df) %>%
     ungroup() %>%
-    select(-DIAGNOSIS) %>%
+    select(-!!sym(imputeGroup)) %>%
     spread(Sample, Intensity) %>%
     select(-starts_with("Intensity"), -starts_with("LFQ intensity"), -starts_with("MS/MS count"))
   # impute each group, combine with impute_df
   for (i in diagnoses) {
     cur_grp <- groupdata_df %>%
       ungroup() %>%
-      filter(DIAGNOSIS == i) %>%
+      filter(!!sym(imputeGroup) == i) %>%
       spread(Sample, Intensity) %>%
       select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), id)
     pc <- pca(cur_grp, method="bpca", nPcs=nPcs)
     impute_df <- impute_df %>%
       inner_join(completeObs(pc), copy=TRUE)
   }
+  
   # convert to long format
-  # convert protein groups tibble to long format
   if (intensity_type == "Raw") {
     impute_df <- impute_df %>%
       gather("Sample", "Intensity", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
