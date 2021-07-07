@@ -14,16 +14,6 @@ library(biomaRt)
 # install.packages("imputeLCMD")
 library(imputeLCMD)
 
-getBM_single_attribute <- function(attribute, filters, values, mart) {
-  out_bm <- getBM(attributes=c(attribute), filters=filters, values=c(values), mart=mart)
-  if (is.null(out_bm)) {
-    return ("None")
-  }
-  else {
-    return (paste0(pull(out_bm, !!sym(attribute)), collapse=";"))
-  }
-}
-
 # define pipeline
 # pg_df: input dataframe
 # removeContaminant, removeReverse: whether rows with possible contaminants or reverse sequences, respectively, are kept (if set to false) or removed (if set to true).
@@ -37,11 +27,31 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   out_df <- tibble(pg_df)
   print("Successfully created copy of input tibble.")
   
+  # create id column
+  print("Attempting to detect if id column exists...")
+  if ("id" %in% colnames(out_df)) {
+    print("id column exists.")
+  }
+  else {
+    print("id column does not exist, attempting to create id column...")
+    out_df <- out_df %>%
+      mutate(id = row_number())
+  }
+  
+  # convert "." in columns to " "
+  print("Attemtping to convert periods in column names to spaces...")
+  names(out_df) <- sub("Protein.IDs", "Protein IDs", names(out_df))
+  names(out_df) <- sub("Intensity.", "Intensity ", names(out_df))
+  names(out_df) <- sub("LFQ.intensity.", "LFQ intensity ", names(out_df))
+  names(out_df) <- sub("MS.MS.count.", "MS/MS count ", names(out_df))
+  names(out_df) <- sub("Potential.contaminant", "Potential contaminant", names(out_df))
+  print("Successfully changed column names.")
+  
   # remove unnecessary columns
   print("Attempting to remove unnecessary columns from input tibble...")
   print(paste("Number of columns:", ncol(out_df)))
   out_df <- out_df %>%
-    dplyr::select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), Reverse, `Potential contaminant`, id, -`Peptide IDs`, -Intensity, -`Gene names`)
+    dplyr::select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), Reverse, `Potential contaminant`, id, -Intensity)
   print(paste("Number of columns after removal:", ncol(out_df)))
   print("Successfully removed unnecessary columns from input tibble.")
   
@@ -153,7 +163,7 @@ combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID') {
   # } else if (intensity_type == "MS2") {
   #   proteingroups <- proteingroups %>%
   #     gather("Sample", "MS/MS count", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
-  # } else {
+  # } else { 
   #   warning("type should be specified as 'Raw', 'LFQ', or 'MS2'.")
   # }
   print(paste("Number of rows after conversion:", nrow(pg_df)))
@@ -363,11 +373,11 @@ add_bm <- function (pg_df, pg_col = "Protein groups", server = "useast.ensembl.o
 
 # read protein group files
 print("Attempting to open pgdata.tsv and manifest.tsv...")
-pgdata <- read_tsv("pgdata.tsv")
-manifest <- read_tsv("manifest.tsv")
+pgdata <- read_tsv("ad_vs_n_data.tsv")
+manifest <- read_tsv("manifest2.tsv")
 print("Successfully opened pgdata.tsv and manifest.tsv.")
 pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = TRUE, removeContaminant = TRUE, removeReverse = TRUE)
-pgdata_2 <- combine_matrix(pgdata_1, manifest, sample.id.col='Sample.ID')
+pgdata_2 <- combine_matrix(pgdata_1, manifest, sample.id.col='Sample.ID2')
 # pgdata_3 <- filter_intensities(pgdata_2, method="raw", maxNA = 5, filterGroup = 'DIAGNOSIS')
 pgdata_3 <- filter_intensities(pgdata_2, method = "percentage", percentageNA = 0.5, filterGroup = 'DIAGNOSIS')
 pgdata_4 <- impute(pgdata_3, nPcs = 3, method = "mindet", imputeGroup = "DIAGNOSIS")
@@ -376,6 +386,6 @@ pgdata_5 <- add_bm(pgdata_4, pg_col = "Protein groups", server = "useast.ensembl
 # NOTE TO SELF: make sure pgdata_2 can go straight to pgdata_4
 # pressure test imputegroup on made-up column (e.g. gender)
 # no cross referencing
-print("Attempting to write final data to pgdata_processed.tsv...")
-write_tsv(pgdata_5, "pgdata_processed.tsv")
-print("Successfully wrote final data to pgdata_processed.tsv.")
+print("Attempting to write final data to pgdata_processed_2.tsv...")
+write_tsv(pgdata_5, "pgdata_processed_2.tsv")
+print("Successfully wrote final data to pgdata_processed_2.tsv.")
