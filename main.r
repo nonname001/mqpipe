@@ -14,16 +14,6 @@ library(biomaRt)
 # install.packages("imputeLCMD")
 library(imputeLCMD)
 
-getBM_single_attribute <- function(attribute, filters, values, mart) {
-  out_bm <- getBM(attributes=c(attribute), filters=filters, values=c(values), mart=mart)
-  if (is.null(out_bm)) {
-    return ("None")
-  }
-  else {
-    return (paste0(pull(out_bm, !!sym(attribute)), collapse=";"))
-  }
-}
-
 # define pipeline
 # pg_df: input dataframe
 # removeContaminant, removeReverse: whether rows with possible contaminants or reverse sequences, respectively, are kept (if set to false) or removed (if set to true).
@@ -31,7 +21,7 @@ getBM_single_attribute <- function(attribute, filters, values, mart) {
 # log2t: whether intensities are transformed using log2.
 # one_protein_per_row: if set to true, N proteins identified in the same row are split into N different rows.
 runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = "Raw", log2t = FALSE, one_protein_per_row = FALSE) {
-  print("Running Part 1 of 4...")
+  print("Running Part 1 of 6...")
   # create copy of input dataframe
   print("Attempting to create copy of input tibble...")
   out_df <- tibble(pg_df)
@@ -41,7 +31,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   print("Attempting to remove unnecessary columns from input tibble...")
   print(paste("Number of columns:", ncol(out_df)))
   out_df <- out_df %>%
-    dplyr::select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), Reverse, `Potential contaminant`, id, -`Peptide IDs`, -Intensity, -`Gene names`)
+    dplyr::select(`Protein IDs`, starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"), Reverse, `Potential contaminant`, id, -`Peptide IDs`, -Intensity, -`Gene names`, -`MS/MS count`)
   print(paste("Number of columns after removal:", ncol(out_df)))
   print("Successfully removed unnecessary columns from input tibble.")
   
@@ -67,21 +57,21 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   
   # remove columns of other types of intensities
   if (type == "Raw") {
-    print("Raw intensity dplyr::selected, attempting to remove LFQ intensity and MS/MS count columns...")
+    print("Raw intensity selected, attempting to remove LFQ intensity and MS/MS count columns...")
     print(paste("Number of columns:", ncol(out_df)))
     out_df <- out_df %>%
       dplyr::select(-starts_with("LFQ intensity"), -starts_with("MS/MS count"))
     print(paste("Number of columns after removal:", ncol(out_df)))
     print("Successfully removed LFQ intensity and MS/MS count columns.")
   } else if (type == "LFQ") {
-    print("LFQ intensity dplyr::selected, attempting to remove raw intensity and MS/MS count columns...")
+    print("LFQ intensity selected, attempting to remove raw intensity and MS/MS count columns...")
     print(paste("Number of columns:", ncol(out_df)))
     out_df <- out_df %>%
       dplyr::select(-starts_with("Intensity"), -starts_with("MS/MS count"))
     print(paste("Number of columns after removal:", ncol(out_df)))
     print("Successfully removed raw intensity and MS/MS count columns.")
   } else if (type == "MS2") {
-    print("MS/MS count dplyr::selected, attempting to remove raw intensity and LFQ intensity columns...")
+    print("MS/MS count selected, attempting to remove raw intensity and LFQ intensity columns...")
     print(paste("Number of columns:", ncol(out_df)))
     out_df <- out_df %>%
       dplyr::select(-starts_with("Intensity"), -starts_with("LFQ intensity"))
@@ -93,7 +83,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   
   # remove rows with contaminants and reverses, if specified
   if (removeContaminant) {
-    print("Remove contaminant dplyr::selected, attempting to rows that were potentially contaminated...")
+    print("Remove contaminant selected, attempting to rows that were potentially contaminated...")
     print(paste("Number of rows:", nrow(out_df)))
     out_df <- out_df %>%
       filter(is.na(`Potential contaminant`))
@@ -102,7 +92,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   }
   
   if (removeReverse) {
-    print("Remove reverses dplyr::selected, attempting to rows that were potentially reversed...")
+    print("Remove reverses selected, attempting to rows that were potentially reversed...")
     print(paste("Number of rows:", nrow(out_df)))
     out_df <- out_df %>%
       filter(is.na(Reverse))
@@ -115,7 +105,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   
   # split each row into more rows depending on amount of identified proteins, if one_protein_per_row = TRUE
   if (one_protein_per_row) {
-    print("One protein per row dplyr::selected, attempting to separate each row corresponding to individual proteins...")
+    print("One protein per row selected, attempting to separate each row corresponding to individual proteins...")
     print(paste("Number of rows:", nrow(out_df)))
     out_df <- out_df %>%
       separate_rows(`Protein IDs`, sep = ';')
@@ -124,7 +114,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   }
   
   # output a dataframe
-  print("Part 1 of 4 complete, returning tibble...")
+  print("Part 1 of 6 complete, returning tibble...")
   return(out_df)
 }
 
@@ -133,7 +123,7 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
 # sample.id.col: name of the column containing sample IDs
 # intensity_type: "Raw", "LFQ", or "MS2" (REMOVED)
 combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID') {
-  print("Running part 2 of 4...")
+  print("Running part 2 of 6...")
   print("Attempting to create copy of input tibble...")
   proteingroups <- tibble(pg_df)
   print("Succesfully created copy of input tible.")
@@ -178,7 +168,7 @@ combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID') {
   print(paste("Number of columns after join:", ncol(pg_df)))
   print("Successfully joined protein groups and sample manifest tibbles.")
   
-  print("Part 2 of 4 complete, returning combined tibble...")
+  print("Part 2 of 6 complete, returning combined tibble...")
   return(combined_df)
 }
 
@@ -189,7 +179,7 @@ combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID') {
 # maxNA: maximum amount of NA values allowed within a filter group that is kept
 # log2t: Boolean that specifies whether the data was log2 transformed or not
 filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSIS',percentageNA = 0.5, maxNA=0) {
-  print("Running part 3 of 4...")
+  print("Running part 3 of 6...")
   
   # throw error if percentageNA < 0 or > 1
   if (percentageNA < 0 || percentageNA > 1) {
@@ -240,14 +230,14 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
   
   # then, filter based on percentage or raw amount
   if (method == "percentage") {
-    print("Filter by percentage dplyr::selected, attempting to remove rows with all filter groups whose NA rates are lower than specified...")
+    print("Filter by percentage selected, attempting to remove rows with all filter groups whose NA rates are lower than specified...")
     print(paste("Number of rows:", nrow(filtered_df)))
     filtered_df <- filtered_df %>%
       filter(MinNARate <= percentageNA)
     print(paste("Number of rows after filtering:", nrow(filtered_df)))
     print("Successfully removed rows with all filter groups whose NA rates are lower than specified.")
   } else if (method == "raw") {
-    print("Filter by raw amount dplyr::selected, attempting to remove rows with all filter groups whose NA counts are lower than specified...")
+    print("Filter by raw amount selected, attempting to remove rows with all filter groups whose NA counts are lower than specified...")
     print(paste("Number of rows:", nrow(filtered_df)))
     filtered_df <- filtered_df %>%
       group_by(`Protein IDs`, !!sym(filterGroup)) %>%
@@ -258,17 +248,17 @@ filter_intensities <- function(pg_df, method='percentage', filterGroup='DIAGNOSI
     warning("Matrix was not filtered; method was not specified as 'percentage' or 'raw'")
   }
   
-  print("Part 3 of 4 complete, returning filtered tibble...")
+  print("Part 3 of 6 complete, returning filtered tibble...")
   return(filtered_df)
 }
 
 # pg_df: tibble containing protein groups
-# method: "ppca", "bpca", or "mindet
+# method: "ppca", "bpca", or "mindet"
 # nPcs: number of principal components
 # imputeGroup: variable that is used to separate groups for imputation
 # intensity_type: raw intensity, LFQ intensity, or MS/MS count
 impute <- function(pg_df, method = "ppca", nPcs=3, imputeGroup = "DIAGNOSIS") {
-  print("Running part 4 of 4...")
+  print("Running part 4 of 6...")
   
   # split into groups
   print("Attempting to retrieve unique filter group names...")
@@ -335,19 +325,27 @@ impute <- function(pg_df, method = "ppca", nPcs=3, imputeGroup = "DIAGNOSIS") {
   # print(paste("Number of columns after conversion:", ncol(impute_df)))
   # print("Successfully converted tibble with imputations to long format.")
   
-  print("Part 4 of 4 complete, returning imputed tibble...")
+  print("Part 4 of 6 complete, returning imputed tibble...")
   return (impute_df)
 }
 
-add_bm <- function (pg_df, pg_col = "Protein groups", server = "useast.ensembl.org", dataset = "hsapiens_gene_ensembl") {
+# pg_df: tibble containing protein groups
+# pg_col: column containing name of protein IDs
+# server: biomaRt server
+# dataset: ensembl dataset
+add_bm <- function (pg_df, pg_col = "Protein IDs", server = "useast.ensembl.org", dataset = "hsapiens_gene_ensembl") {
+  print("Running part 5 of 6...")
+  
   print("Attempting to initialize biomaRt...")
-  mart <- useMart("ensembl", host=server)
+  mart <- useMart("ensembl")
   mart = useDataset(dataset, mart=mart)
   print("Successfully initialized biomaRt.")
   
   print("Attempting to retrieve information from biomaRt...")
   
-  getBM_df <- getBM(attributes=c("hgnc_symbol","description","uniprotswissprot"),filters = "uniprotswissprot",values=pg_df$`Protein IDs`,mart=mart)
+  # getBM_df <- getBM(attributes=c("hgnc_symbol","description","uniprotswissprot"),filters = "uniprotswissprot",values=pull(pg_df, !!sym(pg_col)),mart=mart)
+  
+  getBM_df <- getBM(attributes=c("hgnc_symbol","description","uniprotswissprot"),filters = "uniprotswissprot",values=pull(pg_df, !!sym(pg_col)),mart=mart)
   
   getBM_df <- getBM_df %>%
     group_by(uniprotswissprot) %>%
@@ -358,7 +356,39 @@ add_bm <- function (pg_df, pg_col = "Protein groups", server = "useast.ensembl.o
 
   print("Successfully retrieved information from biomaRt.")
   
+  print("Part 5 of 6 complete, returning updated tibble...")
+  
   return (new_df)
+}
+
+# pg_df: tibble with protein groups
+# df_type: specified as "metadata" or "matrixx"
+output_dfs <- function (pg_df, df_type) {
+  print("Running part 6 of 6...")
+  
+  out_df <- data.frame(pg_df)
+  
+  if (df_type == "matrixx") {
+    print("matrixx selected, attempting to create data matrix...")
+    row.names(out_df) <- out_df$id
+    out_df <- out_df %>%
+      dplyr::select(starts_with("Intensity"), starts_with("LFQ.intensity"), starts_with("MS.MS.count"))
+    colnames(out_df) <- gsub("\\bIntensity.", "", colnames(out_df))
+    colnames(out_df) <- gsub("\\bLFQ.intensity.", "", colnames(out_df))
+    colnames(out_df) <- gsub("\\bMS.MS.count.", "", colnames(out_df))
+    print("Data matrix successfully created.")
+  } else if (df_type == "metadata") {
+    print("metadata selected, attempting to create metadata...")
+    row.names(out_df) <- out_df$id
+    out_df <- out_df %>%
+      dplyr::select(!starts_with("Intensity") & !starts_with("LFQ.intensity") & !starts_with("MS.MS.count"))
+    print("Metadata successfully created.")
+  } else {
+    warning("Parameter 'df_type' should be specified as 'metadata' or 'matrixx'!")
+  }
+  
+  print("Part 6 of 6 complete, returning requested tibble...")
+  return(out_df)
 }
 
 # read protein group files
@@ -366,16 +396,20 @@ print("Attempting to open pgdata.tsv and manifest.tsv...")
 pgdata <- read_tsv("pgdata.tsv")
 manifest <- read_tsv("manifest.tsv")
 print("Successfully opened pgdata.tsv and manifest.tsv.")
-pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = TRUE, removeContaminant = TRUE, removeReverse = TRUE)
+pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = TRUE, removeContaminant = TRUE, removeReverse = TRUE, type="MS2")
 pgdata_2 <- combine_matrix(pgdata_1, manifest, sample.id.col='Sample.ID')
 # pgdata_3 <- filter_intensities(pgdata_2, method="raw", maxNA = 5, filterGroup = 'DIAGNOSIS')
 pgdata_3 <- filter_intensities(pgdata_2, method = "percentage", percentageNA = 0.5, filterGroup = 'DIAGNOSIS')
 pgdata_4 <- impute(pgdata_3, nPcs = 3, method = "mindet", imputeGroup = "DIAGNOSIS")
-pgdata_5 <- add_bm(pgdata_4, pg_col = "Protein groups", server = "useast.ensembl.org", dataset = "hsapiens_gene_ensembl")
-# fill in all arguments here for documentation
-# NOTE TO SELF: make sure pgdata_2 can go straight to pgdata_4
-# pressure test imputegroup on made-up column (e.g. gender)
-# no cross referencing
+pgdata_5 <- add_bm(pgdata_4, pg_col = "Protein IDs", server = "useast.ensembl.org", dataset = "hsapiens_gene_ensembl")
+matrixx <- output_dfs(pgdata_5, "matrixx")
+metadata <- output_dfs(pgdata_5, "metadata")
 print("Attempting to write final data to pgdata_processed.tsv...")
 write_tsv(pgdata_5, "pgdata_processed.tsv")
 print("Successfully wrote final data to pgdata_processed.tsv.")
+print("Attempting to write final data matrix to pgdata_matrix.rds...")
+saveRDS(matrixx, "pgdata_matrix.rds")
+print("Successfully wrote final data matrix to pgdata_matrix.rds.")
+print("Attempting to write final metadata to pgdata_metadata.rds...")
+saveRDS(metadata, "pgdata_metadata.rds")
+print("Successfully wrote final metadata to pgdata_metadata.rds.")
