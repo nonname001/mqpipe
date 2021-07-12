@@ -27,6 +27,26 @@ runMQ <- function(pg_df, removeContaminant = TRUE, removeReverse = TRUE, type = 
   out_df <- tibble(pg_df)
   print("Successfully created copy of input tibble.")
   
+  # create id column
+  print("Attempting to detect if id column exists...")
+  if ("id" %in% colnames(out_df)) {
+    print("id column exists.")
+  }
+  else {
+    print("id column does not exist, attempting to create id column...")
+    out_df <- out_df %>%
+      mutate(id = row_number())
+  }
+  
+  # convert "." in columns to " "
+  print("Attemtping to convert periods in column names to spaces...")
+  names(out_df) <- sub("Protein.IDs", "Protein IDs", names(out_df))
+  names(out_df) <- sub("Intensity.", "Intensity ", names(out_df))
+  names(out_df) <- sub("LFQ.intensity.", "LFQ intensity ", names(out_df))
+  names(out_df) <- sub("MS.MS.count.", "MS/MS count ", names(out_df))
+  names(out_df) <- sub("Potential.contaminant", "Potential contaminant", names(out_df))
+  print("Successfully changed column names.")
+  
   # remove unnecessary columns
   print("Attempting to remove unnecessary columns from input tibble...")
   print(paste("Number of columns:", ncol(out_df)))
@@ -143,7 +163,7 @@ combine_matrix <- function (pg_df, mf_df, sample.id.col='Sample.ID') {
   # } else if (intensity_type == "MS2") {
   #   proteingroups <- proteingroups %>%
   #     gather("Sample", "MS/MS count", starts_with("Intensity"), starts_with("LFQ intensity"), starts_with("MS/MS count"))
-  # } else {
+  # } else { 
   #   warning("type should be specified as 'Raw', 'LFQ', or 'MS2'.")
   # }
   print(paste("Number of rows after conversion:", nrow(pg_df)))
@@ -393,8 +413,8 @@ output_dfs <- function (pg_df, df_type) {
 
 # read protein group files
 print("Attempting to open pgdata.tsv and manifest.tsv...")
-pgdata <- read_tsv("pgdata.tsv")
-manifest <- read_tsv("manifest.tsv")
+pgdata <- read_tsv("ad_vs_n_data.tsv")
+manifest <- read_tsv("manifest2.tsv")
 print("Successfully opened pgdata.tsv and manifest.tsv.")
 pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = TRUE, removeContaminant = TRUE, removeReverse = TRUE, type="MS2")
 pgdata_2 <- combine_matrix(pgdata_1, manifest, sample.id.col='Sample.ID')
