@@ -435,15 +435,15 @@ output_dfs <- function (pg_df, df_type) {
 
 # read protein group files
 print("Attempting to open pgdata.tsv and manifest.tsv...")
-pgdata <- read_tsv("ad_vs_n_data.tsv")
+pgdata <- read_tsv("ad_m_f_data.tsv")
 manifest <- read_tsv("manifest2.tsv")
 contaminants <- read_tsv("Contaminants.tsv")
 print("Successfully opened pgdata.tsv, manifest.tsv, and Contaminants.tsv.")
-pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = FALSE, removeContaminant = TRUE, removeReverse = TRUE, type="Raw", contaminant_list = contaminants)
+pgdata_1 <- runMQ(pgdata, log2t = TRUE, one_protein_per_row = FALSE, removeContaminant = FALSE, removeReverse = TRUE, type="Raw", contaminant_list = contaminants)
 pgdata_2 <- combine_matrix(pgdata_1, manifest, sample.id.col='Sample.ID2')
 # pgdata_3 <- filter_intensities(pgdata_2, method="raw", maxNA = 5, filterGroup = 'DIAGNOSIS')
 pgdata_3 <- filter_intensities(pgdata_2, method = "percentage", percentageNA = 0.5, filterGroup = 'DIAGNOSIS')
-pgdata_4 <- impute(pgdata_3, nPcs = 3, method = "mindet", imputeGroup = "DIAGNOSIS")
+pgdata_4 <- impute(pgdata_3, nPcs = 3, method = "bpca", imputeGroup = "DIAGNOSIS")
 pgdata_5 <- add_bm(pgdata_4, pg_col = "Protein IDs", server = "useast.ensembl.org", dataset = "hsapiens_gene_ensembl")
 matrixx <- output_dfs(pgdata_5, "matrixx")
 metadata <- output_dfs(pgdata_5, "metadata")
